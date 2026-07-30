@@ -11,12 +11,18 @@ export class APIError extends Error {
   }
 }
 
+const API_BASE_URL = (import.meta.env.VITE_API_BASE_URL || "/api/v1").replace(/\/+$/, "");
+
+export function apiURL(path: string): string {
+  return `${API_BASE_URL}${path.startsWith("/") ? path : `/${path}`}`;
+}
+
 export async function api<T>(path: string, init: RequestInit = {}): Promise<T> {
   const headers = new Headers(init.headers);
   if (init.body && !(init.body instanceof FormData) && !headers.has("Content-Type")) {
     headers.set("Content-Type", "application/json");
   }
-  const response = await fetch(`/api/v1${path}`, {
+  const response = await fetch(apiURL(path), {
     ...init,
     headers,
     credentials: "include"
@@ -35,7 +41,7 @@ export const jsonBody = (value: unknown): Pick<RequestInit, "body"> => ({
 });
 
 export async function ankiInvoke<T>(action: string, params: Record<string, unknown> = {}): Promise<T> {
-  const response = await fetch("http://127.0.0.1:8765", {
+  const response = await fetch(import.meta.env.VITE_ANKI_CONNECT_URL || "http://127.0.0.1:8765", {
     method: "POST",
     body: JSON.stringify({ action, version: 6, params }),
     headers: { "Content-Type": "application/json" }
@@ -50,4 +56,3 @@ export async function contentHash(value: unknown): Promise<string> {
   const digest = await crypto.subtle.digest("SHA-256", bytes);
   return Array.from(new Uint8Array(digest)).map((byte) => byte.toString(16).padStart(2, "0")).join("");
 }
-

@@ -1,12 +1,13 @@
 services:
   postgres:
-    image: postgres:17-alpine
+    image: ${POSTGRES_IMAGE:-postgres:17-alpine}
+    restart: unless-stopped
     environment:
       POSTGRES_DB: ${POSTGRES_DB:-focusflow}
       POSTGRES_USER: ${POSTGRES_USER:-focusflow}
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-focusflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD in .env}
     ports:
-      - "5432:5432"
+      - "${POSTGRES_BIND_HOST:-127.0.0.1}:${POSTGRES_PORT:-5432}:5432"
     volumes:
       - focusflow_pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -16,21 +17,29 @@ services:
       retries: 20
 
   api:
+    restart: unless-stopped
     build:
       context: .
       target: runtime
     environment:
-      DATABASE_URL: postgres://focusflow:focusflow@postgres:5432/focusflow?sslmode=disable
-      API_ADDR: :8080
-      APP_ORIGIN: http://localhost:8080
-      APP_ENV: production
-      SESSION_TTL_HOURS: 720
+      DATABASE_URL: postgres://${POSTGRES_USER:-focusflow}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB:-focusflow}?sslmode=disable
+      API_ADDR: 0.0.0.0:8080
+      APP_ORIGIN: ${PUBLIC_ORIGIN:-http://localhost:8080}
+      APP_ENV: ${APP_ENV:-production}
+      SESSION_TTL_HOURS: ${SESSION_TTL_HOURS:-720}
+      VAPID_PUBLIC_KEY: ${VAPID_PUBLIC_KEY:-}
+      VAPID_PRIVATE_KEY: ${VAPID_PRIVATE_KEY:-}
+      VAPID_SUBJECT: ${VAPID_SUBJECT:-mailto:admin@example.com}
     ports:
-      - "8080:8080"
+      - "${API_BIND_HOST:-127.0.0.1}:${API_PORT:-8080}:8080"
     depends_on:
       postgres:
         condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/health"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
 
 volumes:
   focusflow_pgdata:
-

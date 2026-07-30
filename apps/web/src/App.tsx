@@ -29,7 +29,7 @@ import { Toaster, toast } from "sonner";
 import { addDays, endOfMonth, format, isSameDay, startOfMonth } from "date-fns";
 import { ru } from "date-fns/locale";
 
-import { ankiInvoke, api, APIError, contentHash, jsonBody } from "./api";
+import { ankiInvoke, api, apiURL, APIError, contentHash, jsonBody } from "./api";
 import type {
   Analytics, CalendarBlock, Card, Dashboard, Deck, Goal, Note,
   NotificationItem, Task, TimerState, User
@@ -415,7 +415,7 @@ function CalendarView({ workspace, mutate }: ViewProps) {
   const importICS = async (file?: File) => {
     if (!file) return;
     try {
-      const result = await fetch("/api/v1/calendar/import.ics", { method: "POST", body: file, credentials: "include", headers: { "Content-Type": "text/calendar" } });
+      const result = await fetch(apiURL("/calendar/import.ics"), { method: "POST", body: file, credentials: "include", headers: { "Content-Type": "text/calendar" } });
       if (!result.ok) throw new Error("Не удалось импортировать календарь");
       toast.success("События импортированы");
       await mutate(async () => undefined);
@@ -425,7 +425,7 @@ function CalendarView({ workspace, mutate }: ViewProps) {
     <div className="page calendar-page">
       <PageHeader eyebrow="Время" title="Календарь" description="Перетаскивайте блоки, изменяйте длительность и оставляйте место для жизни." actions={<>
         <button className="secondary-button" onClick={() => uploadRef.current?.click()}><Upload size={16} /> ICS</button>
-        <a className="secondary-button" href="/api/v1/calendar/export.ics"><Download size={16} /> Экспорт</a>
+        <a className="secondary-button" href={apiURL("/calendar/export.ics")}><Download size={16} /> Экспорт</a>
         <button className="primary-button" onClick={() => setBlockDialog({ open: true })}><Plus size={17} /> Блок времени</button>
         <input ref={uploadRef} hidden type="file" accept=".ics,text/calendar" onChange={(event) => void importICS(event.target.files?.[0])} />
       </>} />
@@ -591,7 +591,7 @@ function NoteEditor({ note, theme, onLocal, onSaved, onConvert, onArchive }: { n
     uploadFile: async (file) => {
       const form = new FormData();
       form.append("file", file);
-      const response = await fetch(`/api/v1/notes/${note.id}/attachments`, { method: "POST", body: form, credentials: "include" });
+      const response = await fetch(apiURL(`/notes/${note.id}/attachments`), { method: "POST", body: form, credentials: "include" });
       if (!response.ok) throw new Error("Не удалось загрузить вложение");
       const result = await response.json() as { url: string };
       return result.url;
@@ -840,7 +840,15 @@ function SettingsView({ user, workspace, theme, setTheme, reload }: ViewProps) {
 function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => Promise<void> }) {
   const [mode, setMode] = useState<"login" | "register">("register");
   const [busy, setBusy] = useState(false);
+  const [serviceStatus, setServiceStatus] = useState<"checking" | "online" | "offline">("checking");
   const [form, setForm] = useState({ name: "", email: "", password: "", timezone: Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Tashkent" });
+  useEffect(() => {
+    let active = true;
+    api<{ features: string[] }>("/meta")
+      .then(() => { if (active) setServiceStatus("online"); })
+      .catch(() => { if (active) setServiceStatus("offline"); });
+    return () => { active = false; };
+  }, []);
   const submit = async (event: React.FormEvent) => {
     event.preventDefault(); setBusy(true);
     try {
@@ -853,7 +861,11 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => Prom
   const demo = async () => {
     setBusy(true);
     try { await onAuthenticated(await api<User>("/auth/demo", { method: "POST" })); }
-    catch (error) { toast.error(error instanceof Error ? error.message : "Демо доступно только локально"); }
+    catch (error) {
+      toast.error(serviceStatus === "offline"
+        ? "API и PostgreSQL не запущены. Запустите базу и команду pnpm dev:api."
+        : error instanceof Error ? error.message : "Демо доступно только локально");
+    }
     finally { setBusy(false); }
   };
   return (
@@ -874,6 +886,19 @@ function AuthScreen({ onAuthenticated }: { onAuthenticated: (user: User) => Prom
           <div className="auth-divider"><span>или</span></div>
           <button type="button" className="secondary-button demo-button" onClick={() => void demo()} disabled={busy}><Play size={16} /> Открыть демо</button>
           <p className="auth-switch">{mode === "register" ? "Уже есть аккаунт?" : "Ещё нет аккаунта?"} <button type="button" onClick={() => setMode(mode === "register" ? "login" : "register")}>{mode === "register" ? "Войти" : "Создать"}</button></p>
+          <div className={`service-status ${serviceStatus}`} role="status">
+            <span>{serviceStatus === "offline" ? <WifiOff size={16} /> : serviceStatus === "online" ? <CheckCircle2 size={16} /> : <Cloud className="pulse" size={16} />}</span>
+            <div>
+              <strong>{serviceStatus === "online" ? "API и PostgreSQL подключены" : serviceStatus === "offline" ? "Сервер пока не запущен" : "Проверяем подключение…"}</strong>
+              <small>{serviceStatus === "online" ? "Демо откроется с готовыми задачами и календарём" : serviceStatus === "offline" ? "UI работает на порту 5173, API ожидается на 8080" : "Это займёт пару секунд"}</small>
+            </div>
+          </div>
+          <div className="auth-capabilities" aria-label="Возможности FocusFlow">
+            <span><CalendarDays size={16} /><b>План</b><small>Календарь и цели</small></span>
+            <span><TimerReset size={16} /><b>Фокус</b><small>Таймер и учёт</small></span>
+            <span><FileText size={16} /><b>Заметки</b><small>BlockNote</small></span>
+            <span><Brain size={16} /><b>Знания</b><small>FSRS и Anki</small></span>
+          </div>
         </form>
       </section>
     </div>

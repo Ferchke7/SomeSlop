@@ -4,7 +4,9 @@
   "version": "0.1.0",
   "packageManager": "pnpm@11.9.0",
   "scripts": {
-    "dev": "pnpm --dir apps/web dev",
+    "dev": "pnpm dev:web",
+    "dev:web": "pnpm --dir apps/web dev",
+    "dev:api": "go run ./services/api/cmd/server",
     "build": "pnpm --dir apps/web build",
     "test": "pnpm --dir apps/web test",
     "typecheck": "pnpm --dir apps/web typecheck"

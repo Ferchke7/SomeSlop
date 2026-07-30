@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"log/slog"
+	"net"
 	"net/http"
 	"os"
 	"os/signal"
@@ -12,19 +13,21 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"github.com/joho/godotenv"
 
 	"focusflow/services/api/internal/server"
 	"focusflow/services/api/migrations"
 )
 
 func main() {
+	loadLocalEnv()
 	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{Level: slog.LevelInfo}))
 	slog.SetDefault(logger)
 	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
 	defer stop()
 
 	cfg := server.Config{
-		Addr:            env("API_ADDR", ":8080"),
+		Addr:            apiAddress(),
 		DatabaseURL:     env("DATABASE_URL", "postgres://focusflow:focusflow@localhost:5432/focusflow?sslmode=disable"),
 		AppOrigin:       env("APP_ORIGIN", "http://localhost:5173"),
 		Environment:     env("APP_ENV", "development"),
@@ -66,6 +69,21 @@ func main() {
 	shutdown, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 	_ = httpServer.Shutdown(shutdown)
+}
+
+func loadLocalEnv() {
+	for _, path := range []string{".env", "../../.env"} {
+		if err := godotenv.Load(path); err == nil {
+			return
+		}
+	}
+}
+
+func apiAddress() string {
+	if value := os.Getenv("API_ADDR"); value != "" {
+		return value
+	}
+	return net.JoinHostPort(env("API_HOST", "127.0.0.1"), env("API_PORT", "8080"))
 }
 
 func runMigrations(ctx context.Context, databaseURL string) error {
