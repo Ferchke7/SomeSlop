@@ -1,0 +1,219 @@
+openapi: 3.1.0
+info:
+  title: FocusFlow API
+  version: 0.1.0
+  description: REST API for the FocusFlow personal productivity workspace.
+servers:
+  - url: /api/v1
+security:
+  - sessionCookie: []
+paths:
+  /auth/register:
+    post:
+      security: []
+      summary: Create an account and seeded workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema: { $ref: "#/components/schemas/RegisterInput" }
+      responses:
+        "201": { description: Account created, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "422": { $ref: "#/components/responses/ValidationError" }
+  /auth/login:
+    post:
+      security: []
+      summary: Start a server-side session
+      responses:
+        "200": { description: Signed in, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+        "401": { $ref: "#/components/responses/Unauthorized" }
+  /me:
+    get:
+      summary: Current user
+      responses:
+        "200": { description: User, content: { application/json: { schema: { $ref: "#/components/schemas/User" } } } }
+  /dashboard:
+    get:
+      summary: Today overview counters
+      responses:
+        "200": { description: Dashboard summary }
+  /tasks/:
+    get:
+      summary: List active tasks
+      responses:
+        "200":
+          description: Tasks
+          content:
+            application/json:
+              schema: { type: array, items: { $ref: "#/components/schemas/Task" } }
+    post:
+      summary: Create a task
+      responses:
+        "201": { description: Task created }
+  /tasks/{id}:
+    patch:
+      summary: Update a task using optimistic versioning
+      parameters: [ { $ref: "#/components/parameters/ID" } ]
+      responses:
+        "200": { description: Updated version }
+        "409": { $ref: "#/components/responses/Conflict" }
+    delete:
+      summary: Archive a task
+      parameters: [ { $ref: "#/components/parameters/ID" } ]
+      responses:
+        "204": { description: Archived }
+  /goals/:
+    get:
+      summary: List goals with workload forecasts
+      responses:
+        "200": { description: Goal forecasts }
+    post:
+      summary: Create a monthly goal
+      responses:
+        "201": { description: Goal created }
+  /goals/{id}/plan:
+    post:
+      summary: Replace unlocked future planner blocks with a new non-overlapping plan
+      parameters: [ { $ref: "#/components/parameters/ID" } ]
+      responses:
+        "201": { description: Calendar blocks created }
+        "422": { description: Available calendar capacity is insufficient }
+  /calendar/:
+    get:
+      summary: List blocks in a time range
+      parameters:
+        - { name: from, in: query, schema: { type: string, format: date-time } }
+        - { name: to, in: query, schema: { type: string, format: date-time } }
+      responses:
+        "200": { description: Calendar blocks }
+    post:
+      summary: Create a calendar block
+      responses:
+        "201": { description: Block created }
+  /calendar/export.ics:
+    get:
+      summary: Export the calendar as ICS
+      responses:
+        "200": { description: iCalendar document, content: { text/calendar: {} } }
+  /calendar/import.ics:
+    post:
+      summary: One-time ICS import
+      requestBody:
+        required: true
+        content: { text/calendar: {} }
+      responses:
+        "201": { description: Import count }
+  /timer/:
+    get:
+      summary: Durable timer state
+      responses:
+        "200": { description: Timer state }
+  /timer/start:
+    post:
+      summary: Start the only active user timer
+      responses:
+        "200": { description: Started }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /timer/pause:
+    post: { summary: Pause the active timer, responses: { "200": { description: Paused } } }
+  /timer/resume:
+    post: { summary: Resume the paused timer, responses: { "200": { description: Running } } }
+  /timer/stop:
+    post: { summary: Stop the timer and create a time entry, responses: { "200": { description: Time entry created } } }
+  /notes/:
+    get: { summary: List the note tree, responses: { "200": { description: Notes } } }
+    post: { summary: Create a note, responses: { "201": { description: Note created } } }
+  /notes/{id}:
+    patch:
+      summary: Autosave a BlockNote document using optimistic versioning
+      parameters: [ { $ref: "#/components/parameters/ID" } ]
+      responses:
+        "200": { description: Updated version }
+        "409": { $ref: "#/components/responses/Conflict" }
+  /notes/{id}/attachments:
+    post:
+      summary: Store an attachment up to 10 MB in PostgreSQL
+      parameters: [ { $ref: "#/components/parameters/ID" } ]
+      requestBody: { content: { multipart/form-data: {} } }
+      responses:
+        "201": { description: Attachment URL }
+        "413": { description: File too large }
+  /cards/due:
+    get: { summary: Due FSRS queue with four interval previews, responses: { "200": { description: Due cards } } }
+  /cards/{id}/review:
+    post:
+      summary: Apply an immutable FSRS review
+      parameters: [ { $ref: "#/components/parameters/ID" } ]
+      responses:
+        "200": { description: New due time }
+  /anki/export:
+    get: { summary: Cards available for local AnkiConnect synchronization, responses: { "200": { description: Cards } } }
+  /anki/import:
+    post: { summary: Merge Anki notes and record conflicts, responses: { "200": { description: Sync result } } }
+  /anki/link:
+    post: { summary: Link a local card to an Anki note ID, responses: { "204": { description: Linked } } }
+  /analytics:
+    get: { summary: Focus and retention analytics, responses: { "200": { description: Analytics } } }
+components:
+  securitySchemes:
+    sessionCookie:
+      type: apiKey
+      in: cookie
+      name: focusflow_session
+  parameters:
+    ID:
+      name: id
+      in: path
+      required: true
+      schema: { type: string, format: uuid }
+  responses:
+    Unauthorized:
+      description: Authentication required
+      content: { application/json: { schema: { $ref: "#/components/schemas/APIError" } } }
+    ValidationError:
+      description: Validation failed
+      content: { application/json: { schema: { $ref: "#/components/schemas/APIError" } } }
+    Conflict:
+      description: Version or active-state conflict
+      content: { application/json: { schema: { $ref: "#/components/schemas/APIError" } } }
+  schemas:
+    APIError:
+      type: object
+      required: [code, message]
+      properties:
+        code: { type: string }
+        message: { type: string }
+        fieldErrors: { type: object, additionalProperties: { type: string } }
+        requestId: { type: string }
+    RegisterInput:
+      type: object
+      required: [email, password]
+      properties:
+        email: { type: string, format: email }
+        password: { type: string, minLength: 8 }
+        name: { type: string }
+        timezone: { type: string, default: Asia/Tashkent }
+    User:
+      type: object
+      required: [id, email, displayName, timezone, locale, theme, version]
+      properties:
+        id: { type: string, format: uuid }
+        email: { type: string, format: email }
+        displayName: { type: string }
+        timezone: { type: string }
+        locale: { type: string }
+        theme: { type: string, enum: [light, dark, system] }
+        version: { type: integer }
+    Task:
+      type: object
+      required: [id, title, status, priority, version]
+      properties:
+        id: { type: string, format: uuid }
+        title: { type: string }
+        status: { type: string, enum: [todo, doing, done, cancelled] }
+        priority: { type: integer, minimum: 1, maximum: 4 }
+        dueAt: { type: [string, "null"], format: date-time }
+        estimateSeconds: { type: integer, minimum: 0 }
+        recurrenceRule: { type: [string, "null"], description: RFC 5545 RRULE without the RRULE prefix }
+        version: { type: integer, minimum: 1 }
+

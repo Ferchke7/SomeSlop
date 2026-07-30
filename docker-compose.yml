@@ -1,0 +1,36 @@
+services:
+  postgres:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-focusflow}
+      POSTGRES_USER: ${POSTGRES_USER:-focusflow}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-focusflow}
+    ports:
+      - "5432:5432"
+    volumes:
+      - focusflow_pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-focusflow} -d ${POSTGRES_DB:-focusflow}"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build:
+      context: .
+      target: runtime
+    environment:
+      DATABASE_URL: postgres://focusflow:focusflow@postgres:5432/focusflow?sslmode=disable
+      API_ADDR: :8080
+      APP_ORIGIN: http://localhost:8080
+      APP_ENV: production
+      SESSION_TTL_HOURS: 720
+    ports:
+      - "8080:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  focusflow_pgdata:
+
