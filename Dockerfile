@@ -1,4 +1,4 @@
-FROM node:24-alpine AS web
+FROM node:25-alpine AS web
 RUN corepack enable
 WORKDIR /src
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
@@ -14,7 +14,7 @@ RUN go mod download
 COPY services/api .
 RUN CGO_ENABLED=0 go build -o /focusflow ./cmd/server
 
-FROM alpine:3.22 AS runtime
+FROM alpine:3.24 AS runtime
 RUN adduser -D -H focusflow
 WORKDIR /app
 COPY --from=api /focusflow /app/focusflow
